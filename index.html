@@ -251,9 +251,9 @@
       <input type="text" id="p-name" placeholder="e.g. Mom, Grandpa Joe, Aisha">
 
       <div style="background:var(--ink-panel-raised); border:1px solid var(--thread); border-radius:12px; padding:14px; margin-top:16px;">
-        <label style="margin-top:0">Anthropic API key</label>
-        <div class="hint" style="margin-top:0;margin-bottom:8px;">Needed for replies to actually generate once this app is hosted on its own — get one at console.anthropic.com (Settings → API Keys). Pay-as-you-go, usually cents per conversation.</div>
-        <input type="password" id="p-anthropic-key" placeholder="sk-ant-...">
+        <label style="margin-top:0">OpenRouter API key</label>
+        <div class="hint" style="margin-top:0;margin-bottom:8px;">Free — get one at openrouter.ai → Keys → Create Key. Starts with sk-or-...</div>
+        <input type="password" id="p-anthropic-key" placeholder="sk-or-...">
       </div>
 
       <label>Relationship to you</label>
@@ -516,25 +516,31 @@ async function sendMessage(){
   msgBox.scrollTop = msgBox.scrollHeight;
 
   try{
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
+    const openrouterKey = state.profile.anthropicKey;
+    if(!openrouterKey){
+      throw new Error('no OpenRouter API key set');
+    }
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "x-api-key": state.profile.anthropicKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true"
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + openrouterKey,
+        'HTTP-Referer': window.location.href,
+        'X-Title': 'Still Here'
       },
       body: JSON.stringify({
-        model: "claude-sonnet-5",
-        max_tokens: 1000,
-        system: buildSystemPrompt(),
-        messages: state.messages
+        model: 'meta-llama/llama-3.1-8b-instruct:free',
+        max_tokens: 300,
+        messages: [
+          { role: 'system', content: buildSystemPrompt() },
+          ...state.messages
+        ]
       })
     });
     const data = await response.json();
-    if(data.error){ throw new Error(data.error.message || 'API error'); }
+    if(data.error){ throw new Error(data.error.message || 'OpenRouter error'); }
     typing.remove();
-    const reply = (data.content || []).map(b=>b.text||'').join('\n').trim() || "...";
+    const reply = data.choices?.[0]?.message?.content?.trim() || "...";
     state.messages.push({role:'assistant', content:reply});
     addBubble(reply, 'them');
     setStatus('ready to listen');
@@ -543,7 +549,7 @@ async function sendMessage(){
     typing.remove();
     let msg = "(couldn't reach the model: " + (err.message || 'unknown error') + ")";
     if(!state.profile.anthropicKey){
-      msg = "(no Anthropic API key set — add one in the voice profile screen)";
+      msg = "(no Gemini API key set — add one in the voice profile screen)";
     }
     addBubble(msg, 'system-note');
     setStatus('ready to listen');
